@@ -1,0 +1,441 @@
+
+Laboratory Exercise 1 — Integrating Soil and Weather APIs
+Print
+Back
+
+A hands-on lab applying Module 2's integration workflow — building requests for two differently-shaped APIs, sending them with timeouts, retries and a disk cache, parsing nested JSON with per-property unit conversion, joining static soil onto daily weather, and answering six analytical questions with charts — as one Streamlit app across several Mindanao sites.
+What you'll be able to do after this module
+
+    Set up one Streamlit app and confirm it runs locally before building anything on top of it.
+    Build valid requests for two different APIs — one that batches every site into a single call, and one that takes a single point per call with repeated parameter keys.
+    Send those requests defensively: a timeout on every call, retries with backoff on 429 and 5xx, a disk cache, and a fair-use pause between calls.
+    Parse two differently-shaped JSON responses into tables, applying each SoilGrids property's d_factor to convert mapped units into conventional ones.
+    Join static soil properties onto daily weather rows on a shared key, derive the water balance, and summarise per site.
+    Answer six analytical questions with the right chart for each, and export the integrated dataset with its source attribution.
+
+1
+Lab overview
+
+Module 2 walked through an API integration on one site, in fragments of code, with the answer visible at every step. This lab builds that same integration as one real application — a Streamlit app, in pure Python, that runs the whole pipeline across several sites at once and shows what each step produced. Streamlit is a single Python library that turns a script into a web page: no separate backend, no frontend framework, no JavaScript — just Python functions like st.dataframe() and st.plotly_chart() that render as real UI.
+
+There is no answer key. Your clay percentages, your rainfall totals, and your water balances will be whatever the two APIs return for the coordinates you choose. Every code block below has a copy icon in its corner — use it, then adapt the copied code to your own sites and date range.
+
+api-app/
+├── requirements.txt
+├── .streamlit/
+│   └── config.toml           # theme — Streamlit only reads it from this folder
+├── cache/                    # saved API responses, one JSON per request (§6)
+└── streamlit_app.py          # the whole app — one file, eight numbered code sections
+
+streamlit_app.py
+├── 1  Configuration          sites, endpoints, properties, colours
+├── 2  Build the request      §5
+├── 3  Send the request       §6
+├── 4  Parse the JSON         §7
+├── 5  Integrate              §8
+├── 6  Charts (Q1–Q6)         §9
+├── 7  Page styling           CSS + the process diagram
+└── 8  Pipeline and page      Steps 1–7 rendered in order
+
+Unlike a multi-page app, everything lives in one file here — the section numbers in the code comments match the step numbers on the page, so anything you see rendered can be traced back to the function that produced it.
+1
+Set up the app
+Install Streamlit and the four libraries, add the theme file, and confirm it runs.
+2
+Define the inputs
+Choose sites (latitude, longitude) and a date range — these become the query parameters.
+3
+Build the request
+Endpoint URL plus query parameters, built differently for each of the two APIs.
+4
+Send the request
+Timeout, retry with backoff, disk cache, and a fair-use pause between SoilGrids calls.
+5
+Parse the JSON
+Nested JSON into tables; divide every SoilGrids value by its own d_factor.
+6
+Integrate
+Join the two tables on site, derive the daily water balance, summarise per site.
+7
+Analyse (Q1–Q6)
+Six questions, six chart types — two of which need both APIs at once.
+8
+Export
+Download the summary and the joined daily records as CSV, with provenance attached.
+Tools & libraries
+Python 3 with streamlit, requests, pandas, numpy, and plotly. That is the whole stack — five libraries, no database, no API key, no account to register for. Both services are keyless and free for non-commercial use.
+Watch for
+The SoilGrids REST API is a beta service with no uptime guarantee, and ISRIC has paused it before. Two habits in this lab exist because of that: the app caches every successful response to disk, and it pauses about twelve seconds between SoilGrids calls to stay inside fair use. Do not remove either one — a lab that hammers a free public service in a loop is a lab that gets its whole class rate-limited. If SoilGrids is down on the day you build this, work from the cached responses and say so in your write-up.
+2
+The two data sources, and the sites
+
+Everything in this app comes from two public APIs. Neither needs a key. They have almost nothing in common except the coordinate you hand them — which is precisely what makes the join in §8 worth doing.
+	SoilGrids v2.0 — ISRIC	Open-Meteo — historical archive
+Endpoint	rest.isric.org/soilgrids/v2.0/properties/query	archive-api.open-meteo.com/v1/archive
+Returns	Static soil properties — one value per property, per depth	A daily time series — one row per site per day
+Sites per call	One point per request N calls	Many, as comma-separated coordinates 1 call
+Used here	clay, sand, silt, phh2o, soc at 0–5 cm, value=mean	temperature_2m_mean, precipitation_sum, et0_fao_evapotranspiration
+Licence	CC BY 4.0 — beta API, no uptime guarantee	CC BY 4.0 — free for non-commercial use
+
+That third row drives the whole request design in §5: one batched weather call, but a loop of soil calls with a pause between them.
+The default sites
+
+Five points across Mindanao, chosen to span a range of soil textures and rainfall regimes. You can select any subset of them in the app, or add your own coordinate.
+Site	Latitude	Longitude
+Iligan City	8.200	124.300
+Malaybalay	8.150	125.130
+Valencia	7.900	125.090
+Davao (Calinan)	7.190	125.460
+General Santos	6.150	125.150
+
+Three sites is enough to run the pipeline; five makes Q5's scatter plot worth reading. The app fits a trend line there only once it has five or more points.
+Keep your points on land
+SoilGrids has no values over water, and returns null for a coordinate that falls on a lake, a river, or the sea. That is not an error — the request succeeded, the map simply has no estimate there. The app surfaces it as a warning and carries on; §7 shows how. If you add a custom site and every soil property comes back empty, move the point a few hundred metres inland and try again.
+3
+Step 1 — Set up the app
+
+One folder, one virtual environment, one file. Confirm it runs before writing any integration code — a blank page that loads is a much easier starting point to debug than a finished script that will not start.
+Create the project and its environment
+
+mkdir api-app && cd api-app
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install streamlit requests pandas numpy plotly
+
+# requirements.txt
+streamlit>=1.50
+plotly>=5.24
+pandas>=2.0
+numpy>=1.24
+requests>=2.31
+
+Pin the two that matter: Streamlit 1.50+ for width="stretch" on charts and dataframes, and Plotly 5.24+ for px.scatter_map, the MapLibre-based map Q6 uses. On older Plotly the app falls back to px.scatter_mapbox automatically.
+Add the theme file
+
+# .streamlit/config.toml
+[theme]
+base = "light"
+primaryColor = "#0F6E7A"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F6F6"
+textColor = "#1F2426"
+font = "sans serif"
+
+The folder name matters. Streamlit reads project theme settings only from .streamlit/config.toml — a config.toml sitting loose in the project root is silently ignored, and you get the default theme with no error to tell you why.
+Create the app and run it
+
+# streamlit_app.py
+import streamlit as st
+
+st.set_page_config(page_title="ITD112 Laboratory Exercise 1: API Integration",
+                   layout="wide")
+st.title("Integrating APIs: Soil and Weather Data")
+st.write("Inputs, request, response, parsing, joining, analysis — one step at a time.")
+
+streamlit run streamlit_app.py
+
+Opens a browser tab automatically, usually at http://localhost:8501. Leave this terminal running for the rest of the lab — Ctrl+C in it stops the app. Streamlit reloads the page whenever you save the file, so you never need to restart it by hand.
+Watch for
+Every pip and streamlit command in this lab assumes your terminal's current directory is api-app/ and that the virtual environment is active — most shells show both in the prompt. If streamlit is "not found" right after installing it, the environment is almost certainly not activated.
+4
+Step 2 — Define the inputs
+
+An API call needs to know where and when. Those two answers are the only inputs this whole pipeline takes; everything downstream is derived from them.
+
+import pandas as pd
+from datetime import date
+
+SITES = pd.DataFrame(
+    [
+        ("Iligan City",     8.200, 124.300),
+        ("Malaybalay",      8.150, 125.130),
+        ("Valencia",        7.900, 125.090),
+        ("Davao (Calinan)", 7.190, 125.460),
+        ("General Santos",  6.150, 125.150),
+    ],
+    columns=["site", "lat", "lon"],
+)
+
+SOIL_URL = "https://rest.isric.org/soilgrids/v2.0/properties/query"
+WEATHER_URL = "https://archive-api.open-meteo.com/v1/archive"
+SOIL_PROPERTIES = ["clay", "sand", "silt", "phh2o", "soc"]
+SOIL_DEPTH = "0-5cm"
+DAILY_VARS = ["temperature_2m_mean", "precipitation_sum", "et0_fao_evapotranspiration"]
+TIMEZONE = "Asia/Manila"
+
+Configuration at the top of the file, not scattered through it. Changing the depth interval or adding a soil property is then a one-line edit rather than a search-and-replace.
+
+chosen = st.multiselect("Sites", SITES["site"].tolist(),
+                        default=SITES["site"].tolist()[:3])
+start = st.date_input("Start date", date(2025, 1, 1))
+end = st.date_input("End date", date(2025, 12, 31))
+fetch = st.button("Run the integration", type="primary")
+
+sites = SITES[SITES["site"].isin(chosen)].reset_index(drop=True)
+
+Each widget both renders and returns its value, so the selection is available on the very next line. Nothing runs until the button is pressed — without that gate, Streamlit's re-run-on-every-interaction model would fire an API call each time you touched a date picker.
+Validate before you call
+Two checks belong here, before a single request goes out: at least one site selected, and a start date on or before the end date. An empty site list produces an empty comma-separated coordinate string, which Open-Meteo answers with a 400 — a confusing way to learn you forgot to tick a box.
+5
+Step 3 — Build the request
+
+A request is an endpoint URL plus query parameters. The two APIs want those parameters in genuinely different shapes, and getting that difference right is most of this step.
+Open-Meteo: one call, every site
+
+It accepts comma-separated coordinate lists, so five sites travel in a single GET. The response comes back as a JSON array, one object per site, in the order you sent them.
+SoilGrids: one call per site
+
+It takes a single point. Five sites means five GETs, in a loop, with a pause between them — and the property key is repeated once per soil property rather than comma-joined.
+
+def build_weather_request(sites, start, end):
+    """Open-Meteo accepts comma-separated coordinates, so one request covers every site."""
+    params = {
+        "latitude":  ",".join(str(v) for v in sites["lat"]),
+        "longitude": ",".join(str(v) for v in sites["lon"]),
+        "start_date": start,
+        "end_date": end,
+        "daily": ",".join(DAILY_VARS),
+        "timezone": TIMEZONE,
+    }
+    return {"api": "Open-Meteo", "label": "All sites", "url": WEATHER_URL,
+            "params": params, "full_url": full_url(WEATHER_URL, params)}
+
+def build_soil_request(site, lat, lon):
+    """SoilGrids takes one point per request. 'property' repeats once per soil property."""
+    params = [("lat", lat), ("lon", lon), ("depth", SOIL_DEPTH), ("value", "mean")]
+    params += [("property", p) for p in SOIL_PROPERTIES]      # repeated keys
+    return {"api": "SoilGrids", "label": site, "url": SOIL_URL,
+            "params": params, "full_url": full_url(SOIL_URL, params)}
+
+Note the params type: a list of tuples, not a dict. A dict cannot hold the key "property" five times — the last one would overwrite the rest and you would get one soil property back instead of five.
+
+def full_url(url, params):
+    """The exact URL that will be sent, with the query string encoded."""
+    return requests.Request("GET", url, params=params).prepare().url
+
+Worth building a page around: printing the prepared URL shows students the exact string that goes over the wire, percent-encoding included, without having to trust that requests did the right thing.
+Why not build the URL by hand?
+Because requests already encodes every key and value correctly — the commas in your coordinate list, the spaces in "Davao (Calinan)", the lot. Hand-concatenated query strings are where percent-encoding bugs live, and they fail silently: the server returns something, just not the thing you meant to ask for.
+6
+Step 4 — Send the request, defensively
+
+This is the section that separates a demo from an application. Four protections, each one answering a specific failure you will otherwise meet in front of the class.
+Timeout
+timeout=60 on every call. Without it a stalled connection hangs the app forever, with no error to debug.
+Retry with backoff
+total=3, backoff_factor=2 on 429 and 5xx — waits 2s, 4s, 8s. A 400 is deliberately not retried.
+Disk cache
+Every successful response is written to cache/ under a hash of its URL and parameters. A repeat request never reaches the network.
+Fair-use pause
+About 12 seconds between SoilGrids calls — roughly five per minute, inside what a free beta service can absorb.
+
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+@st.cache_resource
+def http_session():
+    """Session that retries on rate limiting (429) and server errors (5xx)."""
+    retry = Retry(total=3, backoff_factor=2,
+                  status_forcelist=(429, 500, 502, 503, 504),
+                  allowed_methods=("GET",))
+    s = requests.Session()
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+    s.headers["User-Agent"] = "itd112-lab1/1.0"
+    return s
+
+st.cache_resource builds the session once and reuses it across re-runs, so connections are pooled instead of re-opened on every interaction. Setting a User-Agent that identifies your app is basic courtesy toward a free public service.
+
+def send(req):
+    """GET the request and return the response record. A response saved on disk is
+    reused instead of calling the API again."""
+    key = hashlib.sha1(
+        (req["url"] + json.dumps(req["params"], sort_keys=True, default=str)).encode()
+    ).hexdigest()
+    path = CACHE_DIR / f"{key}.json"
+
+    if path.exists():                                   # cache hit — no network at all
+        text = path.read_text(encoding="utf-8")
+        return {"status": None, "from_cache": True, "data": json.loads(text)}
+
+    r = http_session().get(req["url"], params=req["params"], timeout=60)
+    r.raise_for_status()                                # 4xx / 5xx -> exception
+    data = r.json()
+    CACHE_DIR.mkdir(exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return {"status": r.status_code, "from_cache": False, "data": data}
+
+The cache key hashes the URL together with the sorted parameters, so changing a single coordinate or one date produces a different file — and asking the identical question twice never costs a second request.
+
+for i, req in enumerate(soil_reqs):
+    try:
+        res = send(req)
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"SoilGrids failed for {req['label']}: {exc}. The SoilGrids REST API is a "
+            "beta service and is sometimes paused. Try again later.") from exc
+    soil_res.append(res)
+    if not res["from_cache"] and i < len(soil_reqs) - 1:
+        time.sleep(SOILGRIDS_PAUSE_S)                   # fair use, ~5 calls/minute
+
+Two details worth copying: the pause is skipped entirely on a cache hit, so a second run is instant; and the raw exception is re-raised with a sentence that tells the reader what to do about it, rather than a bare stack trace.
+What the response log should show you
+Render the status code, round-trip time, and payload size for every call in a small table. On a first run every row reads 200 with a few hundred milliseconds against it; on a second run every row reads "saved copy" with no time at all. That contrast is the lesson about caching — make it visible rather than asserting it in a comment.
+7
+Step 5 — Parse the JSON into tables
+
+JSON is nested; analysis needs rectangles. The two responses need genuinely different treatment, because they are nested in different ways and for different reasons.
+Open-Meteo: parallel arrays become columns
+
+def parse_weather(data, sites):
+    """Each site's 'daily' block holds parallel arrays; each array becomes a column."""
+    results = data if isinstance(data, list) else [data]   # one site returns an object
+    frames = []
+    for site, res in zip(sites["site"], results):
+        df = pd.DataFrame(res["daily"])
+        df.insert(0, "site", site)
+        frames.append(df)
+    return pd.concat(frames, ignore_index=True)
+
+The isinstance check is not defensive padding — Open-Meteo genuinely returns a bare object for one coordinate and an array of objects for several, so a one-site run crashes without it. The site name has to be inserted by hand, because the response identifies sites only by their position in the array.
+SoilGrids: walk the nesting, then divide
+
+def parse_soil(data, site):
+    """One row per soil property. SoilGrids stores integers; dividing by d_factor gives
+    conventional units (g/kg -> %, pH x10 -> pH, dg/kg -> g/kg)."""
+    rows = []
+    for layer in data["properties"]["layers"]:
+        raw = layer["depths"][0]["values"]["mean"]
+        unit = layer["unit_measure"]
+        rows.append({
+            "site": site,
+            "property": layer["name"],
+            "raw_mean": raw,
+            "mapped_units": unit.get("mapped_units"),
+            "d_factor": unit["d_factor"],
+            "value": np.nan if raw is None else raw / unit["d_factor"],
+            "target_units": unit.get("target_units"),
+        })
+    return pd.DataFrame(rows)
+
+Keeping raw_mean, d_factor, and value as three separate columns turns the conversion into something the reader can audit on screen — 352, ÷10, 35.2 — instead of a number they have to take on faith. Show this table in the app.
+value  =  raw_mean  ÷  d_factorread the divisor from the response, never hardcode 10
+clay 352 ÷ 10 = 35.2 %phh2o 58 ÷ 10 = pH 5.8
+
+def soil_table(soil_long, sites):
+    """Pivot to one row per site, one column per property, and attach coordinates."""
+    wide = (soil_long.pivot(index="site", columns="property", values="value")
+            .reindex(columns=SOIL_PROPERTIES).reset_index())
+    wide.columns.name = None
+    return sites.merge(wide, on="site", how="left")
+
+Long-to-wide: the audit table above has one row per property, but the join in §8 needs one row per site. The reindex fixes the column order to SOIL_PROPERTIES rather than whatever order the pivot produced.
+Handle the nulls out loud
+A coordinate over water returns null for every property, which becomes NaN here. Do not drop those rows silently and do not fill them with zero — a zero would draw a real bar on Q4's texture chart. Detect them and say so:
+
+missing = soil.loc[soil["clay"].isna(), "site"].tolist()
+if missing:
+    st.warning(f"SoilGrids returned null for: {', '.join(missing)}. The map has no "
+               "value at that exact point (water, a built-up area, or a gap in the "
+               "map). The request still succeeded; try moving the point slightly.")
+
+8
+Step 6 — Integrate the two sources
+
+Now the shapes have to be reconciled: many weather rows per site, exactly one soil row per site. A left join copies each site's soil values onto every one of its daily rows — the broadcast from Module 2 §11, done by pandas across several sites at once.
+
+def integrate(weather, soil):
+    daily = weather.merge(soil, on="site", how="left")          # the join
+    daily["time"] = pd.to_datetime(daily["time"])
+    daily["month"] = daily["time"].dt.month
+    daily["water_balance_mm"] = (daily["precipitation_sum"]
+                                 - daily["et0_fao_evapotranspiration"])
+
+    summary = (daily.groupby("site", sort=False)
+               .agg(rain_mm=("precipitation_sum", "sum"),
+                    et0_mm=("et0_fao_evapotranspiration", "sum"),
+                    water_balance_mm=("water_balance_mm", "sum"),
+                    temp_mean_c=("temperature_2m_mean", "mean"))
+               .reset_index().merge(soil, on="site"))
+    return daily, summary
+
+Two tables come out, not one. daily is the full joined record — every site, every day — and drives Q1, Q2, and Q3. summary is one row per site, weather totals beside soil properties, and drives Q4, Q5, and Q6.
+Table	Shape	Built by	Feeds
+weather	one row per site per day	parse_weather()	the join
+soil	one row per site	soil_table()	the join
+daily joined	sites × days, soil broadcast across	integrate()	Q1, Q2, Q3
+summary joined	one row per site	integrate()	Q4, Q5, Q6
+
+Three sites over one year is roughly 1,095 daily rows and 3 summary rows — worth showing as metrics on the page, because the count is what makes the broadcast concrete.
+Check the join before you trust it
+A left join that matches nothing still succeeds — it just fills every soil column with NaN. Confirm the row count is unchanged from the weather table and that clay is populated, before plotting anything. A site name that differs by a stray space between the two tables is the usual culprit, and the charts downstream will simply look empty rather than complain.
+9
+Step 7 — Analyse: six questions, six charts
+
+Module 2 §12 gave the rule — start from the question, then choose the encoding. Here are the six questions this dataset answers, and the chart each one earns. Two of them (Q5 and Q6) cannot be answered by either API alone; those are the ones that justify the whole integration.
+	Question	Chart	Built from
+Q1	How does temperature change over time?	Line chart, 7-day rolling mean	daily · Open-Meteo
+Q2	Does rainfall meet evaporative demand?	Combo: monthly bars + ET0 line, one mm axis	daily · Open-Meteo
+Q3	How variable is daily rainfall?	Box plot by month	daily · Open-Meteo
+Q4	What is the topsoil texture at each site?	100% stacked bar	summary · SoilGrids
+Q5	Does soil moderate water stress?	Bubble scatter + trend line	summary · both integrated
+Q6	Where are the sites, and how do they differ?	Map, colour = SOC, size = rainfall	summary · both integrated
+Q2 — the honest combo chart
+
+def chart_q2(daily, site):
+    """Monthly rainfall bars vs reference ET0 line, on the same mm axis."""
+    m = (daily[daily["site"] == site].groupby("month")
+         [["precipitation_sum", "et0_fao_evapotranspiration"]].sum()
+         .reindex(range(1, 13), fill_value=0))
+    deficit = m["precipitation_sum"] < m["et0_fao_evapotranspiration"]
+
+    fig = go.Figure()
+    fig.add_bar(x=MONTHS, y=m["precipitation_sum"], name="Rainfall (surplus month)",
+                marker_color=np.where(deficit, COLORS["sky_pale"], COLORS["sky"]))
+    fig.add_scatter(x=MONTHS, y=m["et0_fao_evapotranspiration"], name="Reference ET0",
+                    mode="lines+markers", line=dict(color=COLORS["sun"], width=2.5))
+    fig.update_yaxes(title="mm per month", rangemode="tozero")
+    return fig
+
+One y-axis, both series in mm, rangemode="tozero" so the bars are not truncated. Deficit months are shaded paler — colour reinforcing the comparison the chart already makes geometrically, rather than carrying it alone.
+Q4 — normalise before you stack
+
+tex = summary.set_index("site")[["sand", "silt", "clay"]].dropna()
+tex = tex.div(tex.sum(axis=1), axis=0).mul(100).sort_values("clay")
+
+SoilGrids texture fractions rarely sum to exactly 100 — they are independent model outputs, not shares of a whole. Normalising each row to 100% is what makes a stacked bar legitimate; skipping it gives bars of visibly different lengths that invite a comparison the data does not support.
+Q5 — the chart that needs both APIs
+
+s = summary.dropna(subset=["clay", "soc"])
+fig.add_scatter(
+    x=s["clay"], y=s["water_balance_mm"], mode="markers+text", text=s["site"],
+    marker=dict(size=14 + 26 * s["soc"] / s["soc"].max()),   # bubble size = SOC
+)
+if len(s) >= 5:                                  # least-squares trend line
+    slope, intercept = np.polyfit(s["clay"], s["water_balance_mm"], 1)
+    r = np.corrcoef(s["clay"], s["water_balance_mm"])[0, 1]
+    fig.add_scatter(x=xs, y=slope * xs + intercept, mode="lines",
+                    name=f"Linear fit (r = {r:.2f}, n = {len(s)})")
+fig.add_hline(y=0, annotation_text="rainfall = ET0")
+
+Clay comes from SoilGrids, the water balance from Open-Meteo, and organic carbon sizes the bubble — three variables, two APIs, one chart. The horizontal line at zero is the interpretive anchor: above it a site gained water over the period, below it demand exceeded supply.
+Say what five points can and cannot support
+The trend line only appears at n ≥ 5, and the legend prints both r and n so nobody reads it as an established relationship. Five sites is an exploratory sketch, not evidence. Your write-up should say so in as many words — naming the limitation is part of the grade, not a hedge against it.
+10
+Step 8 — Export, with its provenance
+
+Two files, because the two tables answer different needs: the summary is what goes into a report, the joined daily records are what someone continues the analysis from.
+
+b1, b2, _ = st.columns([1, 1, 2])
+b1.download_button("Download site summary (CSV)", summary.to_csv(index=False),
+                   "site_summary.csv", "text/csv", width="stretch")
+b2.download_button("Download daily records (CSV)",
+                   daily.drop(columns="month").to_csv(index=False),
+                   "integrated_daily.csv", "text/csv", width="stretch")
+
+SOURCE_NOTE = (f"Sources: SoilGrids 2.0 (ISRIC, CC BY 4.0), {SOIL_DEPTH} mean; "
+               "Open-Meteo Historical Weather API (CC BY 4.0).")
+
+Both datasets are CC BY 4.0 — free to use on condition that you credit the source. Put this line on the page, under the charts, where a reader will actually see it. An attribution buried in a code comment discharges nothing.
+What provenance means in practice
+Provider, access date, licence, and the caveat. For this lab that last part is specific: SoilGrids is a beta service that may be paused, and the values are modelled estimates with quantified uncertainty, not measurements taken at your coordinate. A dashboard that presents them as ground truth is misleading even though every number in it is correct.
+

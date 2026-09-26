@@ -1,0 +1,19 @@
+# Virtual environment
+.venv/
+    
+# Python cache
+__pycache__/
+*.pyc
+    
+# API cache (optional — include if you want cached responses committed)
+cache/
+    
+# Scratch/helper files
+fix_app.py
+fix_app_color.py
+fix_valencia.py
+fix_valencia2.py
+test_map.py
+test_map.html
+help.txt
+site_summary.csv
