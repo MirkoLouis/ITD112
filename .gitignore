@@ -1,0 +1,18 @@
+# Shared rules for every activity folder; project-specific rules go in
+# that project's own .gitignore.
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets
+.env
+.env.*
+.streamlit/secrets.toml
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
