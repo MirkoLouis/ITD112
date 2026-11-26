@@ -1,0 +1,4 @@
+iso3,country,region,income_group,year,life_exp,u5_mort,mat_mort,tb_inc,ncd_mort,che_pc,che_gdp,oop_share,physicians,nurses,dpt3,water_basic,sanit_basic,gdp_pc_ppp
+AAA,Stub Country A,East Asia & Pacific,Lower middle income,2023,70.1,25.3,120.0,500.0,24.5,180.2,4.1,45.0,0.8,4.5,85.0,94.0,82.0,9000.0
+BBB,Stub Country B,East Asia & Pacific,Upper middle income,2023,75.4,12.8,45.0,90.0,18.2,650.7,5.6,32.0,2.1,3.9,95.0,99.0,93.0,18000.0
+CCC,Stub Country C,East Asia & Pacific,High income,2023,82.6,3.2,6.0,10.0,11.4,4200.3,9.8,15.0,3.4,11.2,98.0,100.0,99.0,52000.0
