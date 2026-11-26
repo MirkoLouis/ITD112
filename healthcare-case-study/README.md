@@ -24,6 +24,7 @@ World Bank, **World Development Indicators (WDI)**, licensed [CC BY 4.0](https:/
 
 ```
 healthcare-case-study/
+├── run.py                  one-command setup and start (python run.py setup | start)
 ├── config/plot_spec.yaml   shared palettes, figure size, chart labels, clustering
 ├── data/raw/               raw WDI pulls (tracked)
 ├── data/processed/         analysis-ready CSVs (currently stubs)
@@ -37,23 +38,23 @@ healthcare-case-study/
 └── docs/                   data dictionary, decisions, cleaning and contribution logs
 ```
 
-## Setup
+## Quick Start
 
-Run every command from this folder (`healthcare-case-study/`).
+**Prerequisites:** [Python](https://www.python.org/downloads/) 3.10 or newer, and [R](https://cran.r-project.org/) if you will run the R scripts. On Windows, tick "Add python.exe to PATH" when installing Python. R does not need to be on PATH.
 
-**R** (packages pinned with renv: WDI, dplyr, tidyr, readr, ggplot2, pheatmap, yaml):
+From this folder (`healthcare-case-study/`), on Windows, macOS or Linux:
 
-```fish
-R -e 'renv::restore()'
+```
+python run.py setup
+python run.py start
 ```
 
-**Python** (per-folder virtual environment):
+On macOS/Linux, use `python3` if `python` is not found. On Windows, `py` also works.
 
-```fish
-python3 -m venv .venv
-source .venv/bin/activate.fish
-pip install -r python/requirements.txt -r app/requirements.txt
-```
+- **`setup`** creates `.venv/` and installs `python/requirements.txt` and `app/requirements.txt` into it. It then restores the R packages pinned in `renv.lock` (WDI, dplyr, tidyr, readr, ggplot2, pheatmap, yaml) with `renv::restore()`. Without R it prints a warning and sets up Python only. You can rerun it safely, for example after a requirements file changes.
+- **`start`** runs the Streamlit app at http://localhost:8501. Stop it with Ctrl+C. Any extra arguments go to Streamlit, e.g. `python run.py start --server.port 8600`.
+
+You don't need to activate `.venv` to use these two commands. Activate it only to run the Python scripts by hand (`.venv\Scripts\activate` on Windows, `source .venv/bin/activate` on macOS/Linux).
 
 ## Run Order
 
@@ -62,8 +63,8 @@ pip install -r python/requirements.txt -r app/requirements.txt
 3. **Model** in `model/`: train, evaluate and explain, writing to `figures/model/`.
 4. **Streamlit**:
 
-   ```fish
-   streamlit run app/Home.py
+   ```
+   python run.py start
    ```
 
    Pages 4 to 7 show `figures/r/NN_name.png` and `figures/py/NN_name.png` side by side, with a placeholder for any figure not generated yet.
