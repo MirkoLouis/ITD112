@@ -56,9 +56,20 @@ def find_rscript() -> str | None:
     if os.name != "nt":
         return None
     program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
-    candidates = sorted(program_files.glob(r"R/R-*/bin/Rscript.exe"))
+    candidates = sorted(
+        program_files.glob("R/R-*/bin/Rscript.exe"), key=r_version_key
+    )
     # Prefer the newest installed R version
     return str(candidates[-1]) if candidates else None
+
+
+def r_version_key(rscript: Path) -> tuple[int, ...]:
+    """Sort key from the R-X.Y.Z folder name, numeric so that 4.10.0
+    sorts after 4.9.0 (a plain string sort gets that wrong)."""
+    version = rscript.parents[1].name.removeprefix("R-")
+    parts = version.split(".")
+    # Non-numeric parts (unexpected folder names) sort first
+    return tuple(int(part) if part.isdigit() else -1 for part in parts)
 
 
 def setup_python() -> int:
