@@ -4,18 +4,6 @@ ITD112 Final Project, also submitted as the ITD105 final requirement ([MirkoLoui
 
 > **Status: scaffold.** The four CSVs in `data/processed/` (`panel_all.csv`, `panel_eap.csv`, `xsec_eap.csv`, `cluster_matrix.csv`) are **stubs** with three fake rows each (`AAA`, `BBB`, `CCC`). They only fix the column layout. No real data has been downloaded yet.
 
-## Team
-
-There are no fixed roles. Tasks are volunteer-based, and each task is recorded in [`docs/contribution_log.md`](docs/contribution_log.md).
-
-| Name | GitHub username | Write access |
-|---|---|---|
-| | | |
-| | | |
-| | | |
-
-Paper file name: `paper/Group[PUT GROUP NUMBER]_Healthcare_Indicators_PH_EAP.pdf`
-
 ## Data Source
 
 World Bank, **World Development Indicators (WDI)**, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Indicator codes and coverage are listed in [`docs/data_dictionary.csv`](docs/data_dictionary.csv).
