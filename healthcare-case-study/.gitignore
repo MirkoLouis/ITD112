@@ -1,0 +1,13 @@
+# Project-specific rules; shared rules live in the root .gitignore.
+# data/raw/ is tracked on purpose: raw WDI pulls are kept for
+# reproducibility.
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+renv/library/
+renv/staging/
+
+# Streamlit
+.streamlit/secrets.toml

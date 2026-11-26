@@ -1,0 +1,51 @@
+# Shared plot specification read by both the R and Python scripts, so the
+# R and Python versions of each figure match.
+
+palettes:
+  # Sequential palette for magnitudes (one direction, low to high)
+  sequential:
+    name: viridis
+    r: viridis            # ggplot2::scale_*_viridis_c(option = "viridis")
+    python: viridis       # matplotlib / seaborn colormap name
+  # Diverging palette for signed values (correlations, z-scores)
+  diverging:
+    name: RdBu
+    r: RdBu               # RColorBrewer "RdBu", reversed so red = high
+    reverse_in_r: true
+    python: RdBu_r        # matplotlib / seaborn colormap name
+    center: 0
+
+figure:
+  width_in: 10
+  height_in: 6
+  dpi: 300
+
+charts:
+  scatter:
+    file: 01_scatter
+    title: "Health Spending per Capita vs Life Expectancy, East Asia and Pacific"
+    x_label: "Current health expenditure per capita, PPP (current international $)"
+    y_label: "Life expectancy at birth (years)"
+  line:
+    file: 02_line
+    title: "Life Expectancy, the Philippines vs East Asia and Pacific, 2000 to 2023"
+    x_label: "Year"
+    y_label: "Life expectancy at birth (years)"
+  heatmap:
+    file: 03_heatmap
+    title: "Correlation of Healthcare System Indicators and Health Outcomes"
+    x_label: "Indicator"
+    y_label: "Indicator"
+  clustermap:
+    file: 04_clustermap
+    title: "Hierarchical Clustering of East Asia and Pacific Economies"
+    x_label: "Indicator (z-score)"
+    y_label: "Economy"
+
+clustering:
+  distance: euclidean
+  linkage: ward
+  r_method: ward.D2       # pheatmap clustering_method / stats::hclust
+  python_method: ward     # seaborn.clustermap(method = "ward")
+  input: z_scored         # cluster_matrix.csv is already z-scored
+  scaling: none           # pheatmap scale = "none"; seaborn z_score = None, standard_scale = None
